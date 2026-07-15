@@ -20,6 +20,7 @@ function ViewReportDialog({ record }: Props) {
         typeof record.report === "string"
             ? JSON.parse(record.report)
             : record.report
+    console.log("REPORT DATA:", report)
 
     return (
         <Dialog>

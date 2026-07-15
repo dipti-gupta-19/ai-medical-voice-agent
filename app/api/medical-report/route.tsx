@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     try {
         const UserInput="AI Doctor Agent Info :"+ JSON.stringify(sessionDetail)+", Conversation:"+JSON.stringify(messages)
         const completion = await openai.chat.completions.create({
-            model: "arcee-ai/trinity-large-preview:free",
+            model: "openrouter/free",
             messages: [
                 { role: "system", content: REPORT_GEN_PROMPT },
                 { role: "user", content: UserInput }

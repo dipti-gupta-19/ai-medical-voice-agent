@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const {notes}=await req.json();
     try {
         const completion = await openai.chat.completions.create({
-            model: "arcee-ai/trinity-large-preview:free",
+            model: "openrouter/free",
             messages: [
                 { role:"system", content:JSON.stringify(AIDoctorAgents)},
                 { role: "user", content: "User Notes/Symptoms:"+notes+", Depends on user notes and symptoms, Please suggest List of Doctors , Return Object in JSON only" }
