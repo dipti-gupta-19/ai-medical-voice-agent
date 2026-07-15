@@ -245,7 +245,7 @@ function MedicalVoiceAgent() {
         router.push('/dashboard');
     };
 
-    const hasConversation = messages.length > 0 || liveTranscript.trim().length > 0;
+    const hasConversation = messages.length > 0 || (liveTranscript?.trim().length ?? 0) > 0;
 
     return (
         <div>
