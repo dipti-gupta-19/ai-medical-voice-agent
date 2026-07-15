@@ -1,8 +1,10 @@
-import { db } from "@/config/db";
+import { getDb } from "@/config/db";
 import { usersTable } from "@/config/schema";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req:NextRequest) {
     const user=await currentUser();
@@ -13,6 +15,7 @@ export async function POST(req:NextRequest) {
     }
     
     try{
+        const db = getDb();
         const users=await db.select().from(usersTable)
         .where(eq(usersTable.email, email))
         

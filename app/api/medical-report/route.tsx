@@ -1,8 +1,10 @@
-import { db } from "@/config/db";
-import { openai } from "@/config/OpenAiModel";
+import { getDb } from "@/config/db";
+import { getOpenAI } from "@/config/OpenAiModel";
 import { SessionChartTable } from "@/config/schema";
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
 
 const REPORT_GEN_PROMPT = `You are an AI Medical Voice Agent that just finished a voice conversation with a user. Based on doctor AI agent Info and conversation between AI medical agent and user, generate a structured report with the following fields:
 1. sessionId: a unique session identifier
@@ -105,6 +107,8 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+        const db = getDb();
+
         await db
             .update(SessionChartTable)
             .set({ conversation: messages })
@@ -115,7 +119,7 @@ export async function POST(req: NextRequest) {
         let report = buildFallbackReport(sessionId, sessionDetail, messages);
 
         try {
-            const completion = await openai.chat.completions.create({
+            const completion = await getOpenAI().chat.completions.create({
                 model: "openrouter/free",
                 messages: [
                     { role: "system", content: REPORT_GEN_PROMPT },

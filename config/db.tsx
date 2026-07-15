@@ -1,5 +1,20 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 
-const sql = neon(process.env.DATABASE_URL!);
-export const db = drizzle({ client: sql });
+type Db = ReturnType<typeof drizzle>;
+
+let dbInstance: Db | null = null;
+
+export function getDb() {
+    if (!dbInstance) {
+        const databaseUrl = process.env.DATABASE_URL;
+
+        if (!databaseUrl) {
+            throw new Error('DATABASE_URL environment variable is not set');
+        }
+
+        dbInstance = drizzle({ client: neon(databaseUrl) });
+    }
+
+    return dbInstance;
+}

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@/config/OpenAiModel";
+import { getOpenAI } from "@/config/OpenAiModel";
 import { AIDoctorAgents } from "@/shared/list";
 import { doctorAgent } from "@/app/(routes)/dashboard/_components/DoctorAgentCard";
+
+export const dynamic = "force-dynamic";
 
 const SUGGEST_DOCTORS_PROMPT = `You are a medical triage assistant. Given a list of available AI doctor agents and user symptoms, suggest the most relevant doctors.
 
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        const completion = await openai.chat.completions.create({
+        const completion = await getOpenAI().chat.completions.create({
             model: "openrouter/free",
             messages: [
                 { role: "system", content: SUGGEST_DOCTORS_PROMPT },

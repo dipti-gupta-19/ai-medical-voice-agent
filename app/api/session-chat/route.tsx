@@ -1,9 +1,11 @@
-import { db } from "@/config/db";
+import { getDb } from "@/config/db";
 import { SessionChartTable, usersTable } from "@/config/schema";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from 'uuid';
 import { desc, eq } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 async function ensureUserExists(user: Awaited<ReturnType<typeof currentUser>>) {
     const email = user?.primaryEmailAddress?.emailAddress;
@@ -11,6 +13,7 @@ async function ensureUserExists(user: Awaited<ReturnType<typeof currentUser>>) {
         return null;
     }
 
+    const db = getDb();
     const existingUsers = await db
         .select()
         .from(usersTable)
@@ -41,6 +44,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "User email not found" }, { status: 400 });
         }
 
+        const db = getDb();
         const sessionId = uuidv4();
         const result = await db.insert(SessionChartTable).values({
             sessionId,
@@ -61,6 +65,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get('sessionId')
     const user = await currentUser();
+
+    const db = getDb();
 
     if (sessionId == 'all') {
         const result = await db.select().from(SessionChartTable)
