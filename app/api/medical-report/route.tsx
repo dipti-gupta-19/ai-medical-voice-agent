@@ -49,9 +49,9 @@ export async function POST(req: NextRequest) {
             ],
         })
         const rawResp = completion.choices[0].message
-        //@ts-ignore
-        const Resp = rawResp.content.trim().replace('```json', '').replace('```', '')
-        const JSONResp = JSON.parse(Resp);
+        const content = rawResp.content?.trim() ?? ""
+        const cleaned = content.replace(/^```json\s*/i, "").replace(/```$/i, "").trim()
+        const JSONResp = JSON.parse(cleaned);
         //save to database
         const result=await db.update(SessionChartTable).set({
             report:JSONResp,
@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json(JSONResp)
     } catch (e) {
-        return NextResponse.json(e)
+        console.error("medical-report error:", e);
+        return NextResponse.json({ error: "Failed to generate report" }, { status: 500 });
     }
 }

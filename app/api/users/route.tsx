@@ -6,27 +6,28 @@ import { eq } from "drizzle-orm";
 
 export async function POST(req:NextRequest) {
     const user=await currentUser();
+    const email = user?.primaryEmailAddress?.emailAddress;
+
+    if (!email) {
+        return NextResponse.json({ error: "User email not found" }, { status: 400 });
+    }
     
     try{
-    //if user already exist
         const users=await db.select().from(usersTable)
-        //@ts-ignore
-        .where(eq(usersTable.email,user?.primaryEmailAddress?.emailAddress))
+        .where(eq(usersTable.email, email))
         
-    //if not then create new user
         if(users?.length==0){
             const result=await db.insert(usersTable).values({
-                //@ts-ignore
-                name:user?.fullName,
-                email:user?.primaryEmailAddress?.emailAddress,
+                name:user?.fullName ?? "User",
+                email,
                 credits:10
-                //@ts-ignore
-            }).returning({usersTable})
-            return NextResponse.json(result[0]?.usersTable)
+            }).returning()
+            return NextResponse.json(result[0])
         }
         return NextResponse.json(users[0]);
 
     }catch(e){
-        return NextResponse.json(e);
+        console.error("users POST error:", e);
+        return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
     }
 }

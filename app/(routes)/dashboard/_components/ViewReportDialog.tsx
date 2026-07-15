@@ -16,11 +16,19 @@ type Props = {
 
 function ViewReportDialog({ record }: Props) {
 
-    const report: any =
-        typeof record.report === "string"
-            ? JSON.parse(record.report)
-            : record.report
-    console.log("REPORT DATA:", report)
+    const report: any = (() => {
+        if (!record.report) return null;
+
+        if (typeof record.report === "string") {
+            try {
+                return JSON.parse(record.report);
+            } catch {
+                return null;
+            }
+        }
+
+        return record.report;
+    })();
 
     return (
         <Dialog>
@@ -41,7 +49,12 @@ function ViewReportDialog({ record }: Props) {
 
                 <div className="mt-6 space-y-6">
 
-                    {/* Visit Info */}
+                    {!report ? (
+                        <p className="text-sm text-gray-500 text-center py-8">
+                            No report available for this consultation yet.
+                        </p>
+                    ) : (
+                        <>
                     <div>
                         <h2 className="font-bold text-blue-500 text-lg mb-2">
                             Visit Info
@@ -146,6 +159,8 @@ function ViewReportDialog({ record }: Props) {
                             for medical concerns.
                         </p>
                     </div>
+                        </>
+                    )}
                 </div>
 
             </DialogContent>

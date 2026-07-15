@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { doctorAgent } from '../../_components/DoctorAgentCard';
-import { Circle, Loader, PhoneCall, PhoneOff } from 'lucide-react';
+import { ArrowLeft, Circle, Loader, PhoneCall } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Vapi from '@vapi-ai/web';
@@ -93,22 +93,33 @@ function MedicalVoiceAgent() {
     };
 
     const endCall = async () => {
-        setLoading(true)
         if (!vapiInstance) return;
-        //stop the call
+
+        setLoading(true);
         vapiInstance.stop();
-        vapiInstance.off('call-start')
-        vapiInstance.off('call-end')
-        vapiInstance.off('message')
-        vapiInstance.off('speech-start')
-        vapiInstance.off('speech-end')
-        //reset call state
-        setCallStarted(false)
-        setVapiInstance(null)
-        toast.success('Your Report is generated!')
-        router.replace('/dashboard')
-        // const result = await GenerateReport()
-        // setLoading(false)
+        vapiInstance.off('call-start');
+        vapiInstance.off('call-end');
+        vapiInstance.off('message');
+        vapiInstance.off('speech-start');
+        vapiInstance.off('speech-end');
+
+        setCallStarted(false);
+        setVapiInstance(null);
+
+        try {
+            if (messages.length > 0) {
+                await GenerateReport();
+                toast.success('Your report has been generated!');
+            } else {
+                toast.info('Call ended without conversation to summarize.');
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error('Failed to generate report');
+        } finally {
+            setLoading(false);
+            router.replace('/dashboard');
+        }
     };
 
     const GenerateReport = async () => {
@@ -123,7 +134,32 @@ function MedicalVoiceAgent() {
 
 
 
+    const goBackToDashboard = async () => {
+        if (callStarted && vapiInstance) {
+            vapiInstance.stop();
+            vapiInstance.off('call-start');
+            vapiInstance.off('call-end');
+            vapiInstance.off('message');
+            vapiInstance.off('speech-start');
+            vapiInstance.off('speech-end');
+            setCallStarted(false);
+            setVapiInstance(null);
+        }
+        router.push('/dashboard');
+    };
+
     return (
+        <div>
+            <Button
+                variant="ghost"
+                className="mb-4 -ml-2"
+                onClick={goBackToDashboard}
+                disabled={loading}
+            >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Dashboard
+            </Button>
+
         <div className='p-5 border  rounded-3xl bg-secondary'>
             <div className='flex justify-between items-center'>
                 <h2 className='p-1 px-2 border rounded-md flex gap-2 items-center'><Circle className={`h-4 w-4 rounded-full ${callStarted ? 'bg-green-500' : 'bg-red-500'}`} />{callStarted ? 'Connected...' : 'Not Connected'}</h2>
@@ -156,6 +192,7 @@ function MedicalVoiceAgent() {
                         </Button>)
                 }
             </div>}
+        </div>
         </div>
     )
 }

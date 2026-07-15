@@ -52,7 +52,9 @@ function AddNewSessionDialog() {
       setSuggestedDoctors(
         Array.isArray(result.data.doctors)
           ? result.data.doctors
-          : []  
+          : Array.isArray(result.data.suggestedDoctors)
+            ? result.data.suggestedDoctors
+            : []
       );
     } catch (error) {
       console.log(error);
