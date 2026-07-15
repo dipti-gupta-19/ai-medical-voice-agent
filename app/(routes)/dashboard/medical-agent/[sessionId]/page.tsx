@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { useParams, useRouter } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { doctorAgent } from '../../_components/DoctorAgentCard';
 import { ArrowLeft, Circle, Loader, PhoneCall } from 'lucide-react';
 import Image from 'next/image';
@@ -33,7 +33,19 @@ function MedicalVoiceAgent() {
     const [liveTranscript, setLiveTranscript] = useState<string>()
     const [messages, setMessages] = useState<messages[]>([])
     const [loading, setLoading] = useState(false);
-    const router=useRouter()
+    const [generatingReport, setGeneratingReport] = useState(false);
+    const [callEnded, setCallEnded] = useState(false);
+    const router = useRouter()
+    const messagesRef = useRef<messages[]>([]);
+    const liveTranscriptRef = useRef<string>("");
+    const currentRoleRef = useRef<string | null>(null);
+    const sessionDetailRef = useRef<SessionDetail | undefined>(undefined);
+    const isFinishingRef = useRef(false);
+    const finishPromiseRef = useRef<Promise<void> | null>(null);
+
+    useEffect(() => {
+        sessionDetailRef.current = sessionDetail;
+    }, [sessionDetail]);
 
     useEffect(() => {
         sessionId && GetSessionDetails();
@@ -45,8 +57,97 @@ function MedicalVoiceAgent() {
         setSessionDetail(result.data)
     }
 
+    const appendMessage = (message: messages) => {
+        messagesRef.current = [...messagesRef.current, message];
+        setMessages(messagesRef.current);
+    };
+
+    const finalizeConversation = () => {
+        const pendingTranscript = liveTranscriptRef.current.trim();
+
+        if (pendingTranscript) {
+            const speaker = currentRoleRef.current === "assistant" ? "assistant" : "user";
+            appendMessage({ role: speaker, text: pendingTranscript });
+            liveTranscriptRef.current = "";
+            setLiveTranscript("");
+            setCurrentRole(null);
+            currentRoleRef.current = null;
+        }
+
+        return messagesRef.current;
+    };
+
+    const cleanupVapi = (vapi?: any) => {
+        const instance = vapi ?? vapiInstance;
+        if (!instance) return;
+
+        instance.off('call-start');
+        instance.off('call-end');
+        instance.off('message');
+        instance.off('speech-start');
+        instance.off('speech-end');
+    };
+
+    const GenerateReport = async (conversationMessages: messages[]) => {
+        const result = await axios.post('/api/medical-report', {
+            messages: conversationMessages,
+            sessionDetail: sessionDetailRef.current,
+            sessionId: sessionId
+        })
+        console.log(result.data)
+        return result.data
+    }
+
+    const handleCallEnded = async (redirectAfter = true) => {
+        if (finishPromiseRef.current) {
+            return finishPromiseRef.current;
+        }
+
+        finishPromiseRef.current = (async () => {
+            if (isFinishingRef.current) return;
+            isFinishingRef.current = true;
+
+            setLoading(true);
+            setGeneratingReport(true);
+            setCallStarted(false);
+            setVapiInstance(null);
+            setCallEnded(true);
+
+            try {
+                const conversationMessages = finalizeConversation();
+
+                if (conversationMessages.length > 0) {
+                    await GenerateReport(conversationMessages);
+                    toast.success('Your report has been generated!');
+                } else {
+                    toast.info('Call ended without conversation to summarize.');
+                }
+            } catch (error) {
+                console.error(error);
+                toast.error('Failed to generate report. Please try again from history.');
+            } finally {
+                setLoading(false);
+                setGeneratingReport(false);
+                if (redirectAfter) {
+                    router.replace('/dashboard');
+                }
+            }
+        })();
+
+        try {
+            await finishPromiseRef.current;
+        } finally {
+            finishPromiseRef.current = null;
+        }
+    };
+
     const StartCall = async () => {
         if (!sessionDetail) return;
+
+        isFinishingRef.current = false;
+        setCallEnded(false);
+        messagesRef.current = [];
+        setMessages([]);
 
         const vapi = new Vapi(process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY!);
         setVapiInstance(vapi);
@@ -58,7 +159,8 @@ function MedicalVoiceAgent() {
 
         vapi.on("call-end", () => {
             console.log("Call ended");
-            setCallStarted(false);
+            cleanupVapi(vapi);
+            handleCallEnded();
         });
 
         vapi.on("error", (err: any) => {
@@ -70,89 +172,52 @@ function MedicalVoiceAgent() {
                 const { role, transcriptType, transcript } = message;
 
                 if (transcriptType === "partial") {
+                    liveTranscriptRef.current = transcript;
+                    currentRoleRef.current = role;
                     setLiveTranscript(transcript);
                     setCurrentRole(role);
                 }
 
                 if (transcriptType === "final") {
                     const speaker = role === "assistant" ? "assistant" : "user";
-
-                    setMessages(prev => [
-                        ...prev,
-                        { role: speaker, text: transcript }
-                    ]);
-
+                    appendMessage({ role: speaker, text: transcript });
+                    liveTranscriptRef.current = "";
+                    currentRoleRef.current = null;
                     setLiveTranscript("");
                     setCurrentRole(null);
                 }
             }
         });
 
-        // IMPORTANT: pass assistantId directly
         vapi.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID!);
     };
 
-    const endCall = async () => {
-        if (!vapiInstance) return;
+    const endCall = () => {
+        if (!vapiInstance || isFinishingRef.current) return;
 
-        setLoading(true);
+        cleanupVapi(vapiInstance);
         vapiInstance.stop();
-        vapiInstance.off('call-start');
-        vapiInstance.off('call-end');
-        vapiInstance.off('message');
-        vapiInstance.off('speech-start');
-        vapiInstance.off('speech-end');
-
-        setCallStarted(false);
-        setVapiInstance(null);
-
-        try {
-            if (messages.length > 0) {
-                await GenerateReport();
-                toast.success('Your report has been generated!');
-            } else {
-                toast.info('Call ended without conversation to summarize.');
-            }
-        } catch (error) {
-            console.error(error);
-            toast.error('Failed to generate report');
-        } finally {
-            setLoading(false);
-            router.replace('/dashboard');
-        }
+        handleCallEnded();
     };
 
-    const GenerateReport = async () => {
-        const result = await axios.post('/api/medical-report', {
-            messages: messages,
-            sessionDetail: sessionDetail,
-            sessionId: sessionId
-        })
-        console.log(result.data)
-        return result.data
-    }
-
-
-
     const goBackToDashboard = async () => {
-        if (callStarted && vapiInstance) {
-            vapiInstance.stop();
-            vapiInstance.off('call-start');
-            vapiInstance.off('call-end');
-            vapiInstance.off('message');
-            vapiInstance.off('speech-start');
-            vapiInstance.off('speech-end');
-            setCallStarted(false);
-            setVapiInstance(null);
+        if ((callStarted || messagesRef.current.length > 0 || liveTranscriptRef.current.trim()) && !isFinishingRef.current) {
+            if (callStarted && vapiInstance) {
+                cleanupVapi(vapiInstance);
+                vapiInstance.stop();
+            }
+            await handleCallEnded();
+            return;
         }
+
         router.push('/dashboard');
     };
 
     return (
         <div>
             <Button
-                variant="ghost"
-                className="mb-4 -ml-2"
+                variant="outline"
+                className="mb-4"
                 onClick={goBackToDashboard}
                 disabled={loading}
             >
@@ -162,7 +227,7 @@ function MedicalVoiceAgent() {
 
         <div className='p-5 border  rounded-3xl bg-secondary'>
             <div className='flex justify-between items-center'>
-                <h2 className='p-1 px-2 border rounded-md flex gap-2 items-center'><Circle className={`h-4 w-4 rounded-full ${callStarted ? 'bg-green-500' : 'bg-red-500'}`} />{callStarted ? 'Connected...' : 'Not Connected'}</h2>
+                <h2 className='p-1 px-2 border rounded-md flex gap-2 items-center'><Circle className={`h-4 w-4 rounded-full ${callStarted ? 'bg-green-500' : 'bg-red-500'}`} />{callStarted ? 'Connected...' : generatingReport ? 'Generating report...' : 'Not Connected'}</h2>
                 <h2 className='font-bold text-xl text-gray-400'>00:00</h2>
             </div>
             {sessionDetail && <div className='flex items-center flex-col mt-10'>
@@ -182,15 +247,29 @@ function MedicalVoiceAgent() {
 
                     {liveTranscript && liveTranscript?.length > 0 && <h2 className='text-lg'>{currentRole}:{liveTranscript}</h2>}
                 </div>
-                {!callStarted ? (<Button onClick={StartCall} disabled={loading} className='mt-20'>
-                    {loading ? <Loader className='animate-spin' /> : <PhoneCall />} Start Call
-                </Button>
-                )
-                    : (
-                        <Button variant={'destructive'} onClick={endCall} disabled={loading}  >
-                            {loading ? <Loader className='animate-spin' /> : <PhoneCall />} Disconnect
-                        </Button>)
-                }
+                {generatingReport ? (
+                    <Button disabled className="mt-20">
+                        <Loader className="animate-spin" />
+                        Generating your medical report...
+                    </Button>
+                ) : callEnded ? (
+                    <Button
+                        onClick={() => router.replace('/dashboard')}
+                        disabled={loading}
+                        className="mt-20"
+                    >
+                        <ArrowLeft />
+                        Return to Dashboard
+                    </Button>
+                ) : !callStarted ? (
+                    <Button onClick={StartCall} disabled={loading} className='mt-20'>
+                        {loading ? <Loader className='animate-spin' /> : <PhoneCall />} Start Call
+                    </Button>
+                ) : (
+                    <Button variant="destructive" onClick={endCall} disabled={loading}>
+                        {loading ? <Loader className='animate-spin' /> : <PhoneCall />} Disconnect
+                    </Button>
+                )}
             </div>}
         </div>
         </div>

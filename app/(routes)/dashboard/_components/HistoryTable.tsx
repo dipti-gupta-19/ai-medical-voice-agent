@@ -31,7 +31,7 @@ function HistoryTable({historyList}:Props) {
   <TableBody>
     {historyList.map((record:SessionDetail,index:number)=>(
        <TableRow key={record.sessionId || index}>
-      <TableCell className="font-medium">{record.selectedDoctor.specialist}</TableCell>
+      <TableCell className="font-medium">{record.selectedDoctor?.specialist ?? "AI Doctor"}</TableCell>
       <TableCell>{record.notes}</TableCell>
       <TableCell>{ moment(new Date(record.createdOn)).fromNow() }</TableCell>
       <TableCell className="text-right"><ViewReportDialog record={record}/></TableCell>
