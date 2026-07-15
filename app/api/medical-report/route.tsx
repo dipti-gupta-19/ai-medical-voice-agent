@@ -102,21 +102,30 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
     }
 
-    if (!Array.isArray(messages) || messages.length === 0) {
+    const conversationMessages: ConversationMessage[] = Array.isArray(messages) && messages.length > 0
+        ? messages
+        : typeof sessionDetail?.notes === "string" && sessionDetail.notes.trim()
+            ? [{ role: "user", text: sessionDetail.notes.trim() }]
+            : [];
+
+    if (conversationMessages.length === 0) {
         return NextResponse.json({ error: "Conversation messages are required" }, { status: 400 });
     }
 
     try {
         const db = getDb();
 
+        let report = buildFallbackReport(sessionId, sessionDetail, conversationMessages);
+
         await db
             .update(SessionChartTable)
-            .set({ conversation: messages })
+            .set({
+                conversation: conversationMessages,
+                report,
+            })
             .where(eq(SessionChartTable.sessionId, sessionId));
 
-        const userInput = `AI Doctor Agent Info: ${JSON.stringify(sessionDetail)}, Conversation: ${JSON.stringify(messages)}`;
-
-        let report = buildFallbackReport(sessionId, sessionDetail, messages);
+        const userInput = `AI Doctor Agent Info: ${JSON.stringify(sessionDetail)}, Conversation: ${JSON.stringify(conversationMessages)}`;
 
         try {
             const completion = await getOpenAI().chat.completions.create({
@@ -145,7 +154,7 @@ export async function POST(req: NextRequest) {
             .update(SessionChartTable)
             .set({
                 report,
-                conversation: messages,
+                conversation: conversationMessages,
             })
             .where(eq(SessionChartTable.sessionId, sessionId));
 
